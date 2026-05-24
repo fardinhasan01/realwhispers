@@ -1,0 +1,71 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "rooms": {
+      "$roomCode": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+
+        "roomCode": { ".validate": "newData.isString()" },
+        "createdAt": { ".validate": "newData.isNumber() || newData.val() === now" },
+
+        "invite": {
+          "token": { ".validate": "newData.isString()" },
+          "expiresAt": { ".validate": "newData.isNumber()" }
+        },
+
+        "users": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.isBoolean()"
+          }
+        },
+
+        "userMeta": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid"
+          }
+        },
+
+        "messages": {
+          "$messageId": {
+            ".read": "auth != null && root.child('rooms').child($roomCode).child('users').child(auth.uid).val() === true",
+            ".write": "auth != null && root.child('rooms').child($roomCode).child('users').child(auth.uid).val() === true"
+          }
+        },
+
+        "typing": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid"
+          }
+        },
+
+        "reactions": {
+          "$messageId": {
+            "$uid": {
+              ".write": "auth != null && auth.uid === $uid"
+            }
+          }
+        },
+
+        "widget": {
+          ".write": "auth != null && root.child('rooms').child($roomCode).child('users').child(auth.uid).val() === true"
+        },
+
+        "nicknames": { "$uid": { ".validate": "newData.isString()" } },
+        "mood": { ".validate": "newData.isString()" },
+        "theme": { ".validate": "newData.isString()" },
+        "disappear": { ".validate": "newData.isString()" }
+      }
+    },
+
+    "calls": {
+      "$roomCode": {
+        ".read": "auth != null && root.child('rooms').child($roomCode).child('users').child(auth.uid).val() === true",
+        ".write": "auth != null && root.child('rooms').child($roomCode).child('users').child(auth.uid).val() === true"
+      }
+    }
+  }
+}

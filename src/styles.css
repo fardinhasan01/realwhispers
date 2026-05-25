@@ -157,4 +157,8 @@
   .scrollbar-hidden::-webkit-scrollbar { display: none; }
   .scrollbar-hidden { scrollbar-width: none; }
   .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+  .safe-top { padding-top: max(0.5rem, env(safe-area-inset-top)); }
+  .call-safe-top { padding-top: max(1.25rem, env(safe-area-inset-top)); }
+  .call-safe-bottom { padding-bottom: max(1.5rem, env(safe-area-inset-bottom)); }
+  .call-overlay { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 }

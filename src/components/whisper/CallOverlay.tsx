@@ -1,9 +1,12 @@
-import { motion } from "framer-motion";
+import type { ReactNode } from "react";
+import { useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Phone, PhoneOff, Video, Mic, MicOff, VideoOff, SwitchCamera, Volume2, VolumeX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CallState } from "@/services/callService";
+import { CallVideo, CallAudio } from "@/components/whisper/CallMedia";
 
 function formatDuration(s: number) {
   const m = Math.floor(s / 60).toString().padStart(2, "0");
@@ -14,12 +17,14 @@ function formatDuration(s: number) {
 interface CallOverlayProps {
   callState: CallState | null;
   incoming: { roomCode: string; state: CallState } | null;
+  partnerName?: string;
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
   duration: number;
   muted: boolean;
   cameraOn: boolean;
   speakerOn?: boolean;
+  error?: string | null;
   onAccept: () => void;
   onDecline: () => void;
   onEnd: () => void;
@@ -32,12 +37,14 @@ interface CallOverlayProps {
 export function CallOverlay({
   callState,
   incoming,
+  partnerName = "Partner",
   localStream,
   remoteStream,
   duration,
   muted,
   cameraOn,
   speakerOn = true,
+  error,
   onAccept,
   onDecline,
   onEnd,
@@ -48,132 +55,214 @@ export function CallOverlay({
 }: CallOverlayProps) {
   const status = callState?.status ?? incoming?.state.status;
   const isVideo = (callState?.type ?? incoming?.state.type) === "video";
-  const show = status === "ringing" || status === "accepted" || incoming;
+  const isIncoming = Boolean(incoming && (!callState || callState.status === "ringing"));
+  const isActive = status === "accepted";
+  const isOutgoingRing = status === "ringing" && callState && !isIncoming;
+  const show = isIncoming || isOutgoingRing || isActive;
+
+  useEffect(() => {
+    document.body.style.overflow = show ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [show]);
 
   if (!show) return null;
-
-  const isIncoming = incoming && !callState;
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="fixed inset-0 z-[100] flex flex-col bg-black/95 backdrop-blur-2xl"
+      exit={{ opacity: 0 }}
+      className="call-overlay fixed inset-0 z-[200] flex min-h-dvh flex-col bg-[#050208] text-white"
+      role="dialog"
+      aria-modal="true"
     >
-      {isVideo && remoteStream && (
-        <video
-          data-remote
-          autoPlay
-          playsInline
-          ref={(el) => { if (el && remoteStream) el.srcObject = remoteStream; }}
-          className="absolute inset-0 h-full w-full object-cover"
-        />
+      {/* Remote media layer */}
+      <div className="absolute inset-0 overflow-hidden">
+        {isVideo && remoteStream ? (
+          <CallVideo
+            stream={remoteStream}
+            muted={!speakerOn}
+            className="h-full w-full object-cover"
+            data-remote
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-gradient-night">
+            {remoteStream && <CallAudio stream={remoteStream} muted={!speakerOn} />}
+            <motion.div
+              animate={{ scale: [1, 1.06, 1] }}
+              transition={{ repeat: Infinity, duration: 2 }}
+              className="flex h-32 w-32 items-center justify-center rounded-full bg-gradient-romance text-5xl shadow-glow-pink"
+            >
+              {isActive ? "🎧" : "📞"}
+            </motion.div>
+          </div>
+        )}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/80" />
+      </div>
+
+      {/* Local PiP */}
+      {isVideo && localStream && (isActive || isOutgoingRing) && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className={cn(
+            "absolute z-20 overflow-hidden rounded-2xl border-2 border-white/25 shadow-2xl",
+            "right-4 top-[max(1rem,env(safe-area-inset-top))]",
+            "h-[28vh] max-h-44 w-[34vw] max-w-[140px] min-w-[100px]",
+          )}
+        >
+          <CallVideo
+            stream={localStream}
+            muted
+            mirror
+            className={cn("h-full w-full object-cover", !cameraOn && "opacity-30")}
+          />
+          {!cameraOn && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+              <VideoOff className="h-8 w-8" />
+            </div>
+          )}
+        </motion.div>
       )}
 
-      {isVideo && localStream && (
-        <video
-          autoPlay
-          playsInline
-          muted
-          ref={(el) => { if (el && localStream) el.srcObject = localStream; }}
-          className="absolute bottom-28 right-4 h-36 w-28 rounded-2xl border-2 border-white/20 object-cover shadow-lg"
-        />
-      )}
+      {/* Top bar */}
+      <header className="call-safe-top relative z-30 flex flex-col items-center px-4 pt-2 text-center">
+        <p className="text-sm font-medium text-white/90">{partnerName}</p>
+        <p className="mt-1 text-xs uppercase tracking-[0.2em] text-white/50">
+          {isIncoming
+            ? `Incoming ${isVideo ? "video" : "voice"} call`
+            : isOutgoingRing
+              ? "Calling…"
+              : formatDuration(duration)}
+        </p>
+        {incoming && (
+          <p className="mt-0.5 font-mono text-[10px] text-[var(--neon-cyan)]">
+            {incoming.roomCode}
+          </p>
+        )}
+        {error && (
+          <p className="mt-2 max-w-xs rounded-full bg-destructive/20 px-3 py-1 text-[11px] text-red-300">
+            {error}
+          </p>
+        )}
+      </header>
 
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 text-center">
-        {isIncoming ? (
+      {/* Center pulse for ringing */}
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6">
+        {(isIncoming || isOutgoingRing) && (
           <>
+            <motion.div
+              animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0.2, 0.5] }}
+              transition={{ repeat: Infinity, duration: 1.5 }}
+              className="absolute h-48 w-48 rounded-full bg-[var(--neon-pink)]/20"
+            />
             <motion.div
               animate={{ scale: [1, 1.08, 1] }}
               transition={{ repeat: Infinity, duration: 1.2 }}
-              className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-romance text-4xl shadow-glow-pink"
+              className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-romance text-4xl shadow-glow-pink"
             >
               {isVideo ? "📹" : "📞"}
-            </motion.div>
-            <h2 className="font-display text-2xl font-bold">Incoming {isVideo ? "video" : "voice"} call</h2>
-            <p className="mt-2 text-sm text-muted-foreground">Room {incoming.roomCode}</p>
-            <div className="mt-10 flex gap-6">
-              <button
-                type="button"
-                onClick={onDecline}
-                className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive shadow-lg"
-              >
-                <PhoneOff className="h-7 w-7 text-white" />
-              </button>
-              <button
-                type="button"
-                onClick={onAccept}
-                className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 shadow-lg"
-              >
-                <Phone className="h-7 w-7 text-white" />
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="text-sm uppercase tracking-widest text-muted-foreground">
-              {status === "ringing" ? "Calling…" : formatDuration(duration)}
-            </p>
-            <motion.div
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ repeat: Infinity, duration: 2 }}
-              className="mt-8 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-aurora text-3xl"
-            >
-              💜
             </motion.div>
           </>
         )}
       </div>
 
-      {!isIncoming && (
-        <div className="relative z-10 flex items-center justify-center gap-4 pb-12">
-          <CallBtn onClick={onToggleMute} active={muted} icon={muted ? MicOff : Mic} label="Mute" />
-          {onToggleSpeaker && (
-            <CallBtn
-              onClick={onToggleSpeaker}
-              active={!speakerOn}
-              icon={speakerOn ? Volume2 : VolumeX}
-              label="Speaker"
+      {/* Controls */}
+      <footer className="call-safe-bottom relative z-30 px-6 pb-4">
+        {isIncoming ? (
+          <div className="flex items-center justify-center gap-10">
+            <CallAction
+              label="Decline"
+              onClick={onDecline}
+              className="bg-red-500 hover:bg-red-600"
+              icon={<PhoneOff className="h-7 w-7" />}
+              size="lg"
             />
-          )}
-          {isVideo && (
-            <>
-              <CallBtn onClick={onToggleCamera} active={!cameraOn} icon={cameraOn ? Video : VideoOff} label="Cam" />
-              <CallBtn onClick={onSwitchCamera} icon={SwitchCamera} label="Flip" />
-            </>
-          )}
-          <button
-            type="button"
-            onClick={onEnd}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive shadow-lg"
-          >
-            <PhoneOff className="h-6 w-6 text-white" />
-          </button>
-        </div>
-      )}
+            <CallAction
+              label="Accept"
+              onClick={onAccept}
+              className="bg-emerald-500 hover:bg-emerald-600"
+              icon={<Phone className="h-7 w-7" />}
+              size="lg"
+            />
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-5">
+            <CallAction
+              label={muted ? "Unmute" : "Mute"}
+              onClick={onToggleMute}
+              active={muted}
+              icon={muted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+            />
+            {onToggleSpeaker && (
+              <CallAction
+                label="Speaker"
+                onClick={onToggleSpeaker}
+                active={!speakerOn}
+                icon={speakerOn ? <Volume2 className="h-6 w-6" /> : <VolumeX className="h-6 w-6" />}
+              />
+            )}
+            {isVideo && (
+              <>
+                <CallAction
+                  label="Camera"
+                  onClick={onToggleCamera}
+                  active={!cameraOn}
+                  icon={cameraOn ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
+                />
+                <CallAction
+                  label="Flip"
+                  onClick={onSwitchCamera}
+                  icon={<SwitchCamera className="h-6 w-6" />}
+                />
+              </>
+            )}
+            <CallAction
+              label="End"
+              onClick={onEnd}
+              className="bg-red-500 hover:bg-red-600"
+              icon={<PhoneOff className="h-6 w-6" />}
+            />
+          </div>
+        )}
+      </footer>
     </motion.div>
   );
 }
 
-function CallBtn({
-  onClick, icon: Icon, label, active,
+function CallAction({
+  label,
+  onClick,
+  icon,
+  className,
+  active,
+  size = "md",
 }: {
-  onClick: () => void;
-  icon: typeof Mic;
   label: string;
+  onClick: () => void;
+  icon: ReactNode;
+  className?: string;
   active?: boolean;
+  size?: "md" | "lg";
 }) {
+  const dim = size === "lg" ? "h-16 w-16" : "h-14 w-14";
   return (
     <button
       type="button"
       onClick={onClick}
-      className={cn(
-        "flex h-12 w-12 flex-col items-center justify-center rounded-full glass text-xs",
-        active && "bg-white/20",
-      )}
       aria-label={label}
+      className={cn(
+        "flex flex-col items-center gap-1.5 rounded-full transition active:scale-95",
+        className ?? "bg-white/15 backdrop-blur-md hover:bg-white/25",
+        active && "ring-2 ring-white/40",
+        dim,
+        "items-center justify-center",
+      )}
     >
-      <Icon className="h-5 w-5" />
+      {icon}
+      <span className="sr-only">{label}</span>
     </button>
   );
 }

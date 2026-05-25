@@ -6,10 +6,13 @@ import {
   type CallType,
 } from "@/services/callService";
 import { getRooms } from "@/lib/whisper-store";
+import { getUserId } from "@/lib/user-id";
+import { normalizeRoomCode } from "@/lib/room-code";
 import { haptic } from "@/lib/haptics";
 
 export function useCall(roomCode: string | null) {
   const svcRef = useRef<CallService | null>(null);
+  const activeRef = useRef(false);
   const [callState, setCallState] = useState<CallState | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -22,44 +25,68 @@ export function useCall(roomCode: string | null) {
 
   useEffect(() => {
     const svc = new CallService({
-      onStateChange: setCallState,
+      onStateChange: (s) => {
+        setCallState(s);
+        activeRef.current = s?.status === "accepted" || s?.status === "ringing";
+        if (s?.status === "ended" || s?.status === "rejected" || s?.status === "missed") {
+          activeRef.current = false;
+          setDuration(0);
+        }
+      },
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,
       onDuration: setDuration,
-      onError: setError,
+      onError: (msg) => {
+        if (msg) {
+          console.error("[WhisperLock] call error", msg);
+          setError(msg);
+        }
+      },
     });
     svcRef.current = svc;
     if (roomCode) svc.listen(roomCode);
+
     return () => {
       svc.stopListening();
-      void svc.endCall();
+      if (activeRef.current) void svc.endCall("ended");
+      else void svc.cleanup();
     };
   }, [roomCode]);
 
   useEffect(() => {
     const codes = getRooms().map((r) => r.id);
     if (!codes.length) return;
-  return subscribeIncomingCalls(codes, (code, state) => {
-      setIncoming({ roomCode: code, state });
+
+    return subscribeIncomingCalls(codes, (code, state) => {
+      const c = normalizeRoomCode(code);
+      if (roomCode && normalizeRoomCode(roomCode) === c && state.callerId === getUserId()) {
+        return;
+      }
+      setIncoming({ roomCode: c, state });
       haptic("heavy");
     });
-  }, []);
+  }, [roomCode]);
 
   const startVoice = useCallback(async () => {
     if (!roomCode || !svcRef.current) return;
+    setError(null);
+    setIncoming(null);
     haptic("medium");
-    await svcRef.current.startCall(roomCode, "voice");
+    await svcRef.current.startVoiceCall(roomCode);
   }, [roomCode]);
 
   const startVideo = useCallback(async () => {
     if (!roomCode || !svcRef.current) return;
+    setError(null);
+    setIncoming(null);
     haptic("medium");
-    await svcRef.current.startCall(roomCode, "video");
+    await svcRef.current.startVideoCall(roomCode);
   }, [roomCode]);
 
   const accept = useCallback(async (code?: string) => {
     const c = code ?? roomCode;
     if (!c || !svcRef.current) return;
+    setError(null);
     haptic("success");
     setIncoming(null);
     await svcRef.current.acceptCall(c);
@@ -69,12 +96,14 @@ export function useCall(roomCode: string | null) {
     const c = code ?? roomCode;
     if (!c || !svcRef.current) return;
     setIncoming(null);
-    await svcRef.current.declineCall(c);
+    await svcRef.current.rejectCall(c);
   }, [roomCode]);
 
   const end = useCallback(async () => {
-    await svcRef.current?.endCall();
+    setIncoming(null);
+    await svcRef.current?.endCall("ended");
     setDuration(0);
+    activeRef.current = false;
   }, []);
 
   const toggleMute = useCallback(() => {
@@ -96,7 +125,10 @@ export function useCall(roomCode: string | null) {
     setSpeakerOn(on);
   }, []);
 
-  const isActive = callState?.status === "accepted" || callState?.status === "ringing";
+  const isActive =
+    callState?.status === "accepted" ||
+    callState?.status === "ringing" ||
+    Boolean(incoming);
 
   return {
     callState,
@@ -111,8 +143,11 @@ export function useCall(roomCode: string | null) {
     isActive,
     startVoice,
     startVideo,
+    startVoiceCall: startVoice,
+    startVideoCall: startVideo,
     accept,
     decline,
+    reject: decline,
     end,
     toggleMute,
     toggleCamera,

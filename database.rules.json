@@ -64,7 +64,15 @@
     "calls": {
       "$roomCode": {
         ".read": "auth != null && root.child('rooms').child($roomCode).child('users').child(auth.uid).val() === true",
-        ".write": "auth != null && root.child('rooms').child($roomCode).child('users').child(auth.uid).val() === true"
+        ".write": "auth != null && root.child('rooms').child($roomCode).child('users').child(auth.uid).val() === true",
+
+        "iceCandidates": {
+          "$uid": {
+            "$candidateId": {
+              ".write": "auth != null && auth.uid === $uid"
+            }
+          }
+        }
       }
     }
   }

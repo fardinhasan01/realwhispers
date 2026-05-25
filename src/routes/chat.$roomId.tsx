@@ -76,6 +76,10 @@ function Chat() {
   const fake = isFakeMode();
 
   useEffect(() => {
+    if (call.error) toast.error(call.error);
+  }, [call.error]);
+
+  useEffect(() => {
     if (!isOnboarded()) { nav({ to: "/onboard" }); return; }
     if (!isUnlocked()) { nav({ to: "/lock" }); return; }
     setActiveRoom(roomId);
@@ -201,15 +205,18 @@ function Chat() {
   if (roomLoading || !room) return null;
 
   return (
-    <main className="relative flex h-dvh flex-col">
+    <main className="relative flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden">
       <CallOverlay
         callState={call.callState}
         incoming={call.incoming}
+        partnerName={room.partnerNickname}
         localStream={call.localStream}
         remoteStream={call.remoteStream}
         duration={call.duration}
         muted={call.muted}
         cameraOn={call.cameraOn}
+        speakerOn={call.speakerOn}
+        error={call.error}
         onAccept={() => void call.accept(call.incoming?.roomCode)}
         onDecline={() => void call.decline(call.incoming?.roomCode)}
         onEnd={() => void call.end()}
@@ -217,7 +224,6 @@ function Chat() {
         onToggleCamera={call.toggleCamera}
         onSwitchCamera={call.switchCamera}
         onToggleSpeaker={call.toggleSpeaker}
-        speakerOn={call.speakerOn}
       />
       <Particles count={10} />
 
@@ -337,7 +343,7 @@ function Chat() {
       <motion.div
         ref={scrollRef}
         className={cn(
-          "scrollbar-hidden relative flex-1 space-y-1 overflow-y-auto px-4 py-6",
+          "scrollbar-hidden relative min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-4 py-4",
           dragOver && "ring-2 ring-inset ring-[var(--neon-pink)]/40",
         )}
         onDragOver={(e) => {

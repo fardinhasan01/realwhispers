@@ -266,7 +266,13 @@ export class CallService {
   toggleSpeaker(on: boolean) {
     this.speakerOn = on;
     const remote = document.querySelector("video[data-remote]") as HTMLVideoElement | null;
-    if (remote) remote.volume = on ? 1 : 0;
+    if (remote) remote.muted = !on;
+  }
+
+  toggleSpeakerMode(): boolean {
+    this.speakerOn = !this.speakerOn;
+    this.toggleSpeaker(this.speakerOn);
+    return this.speakerOn;
   }
 
   toggleCamera(): boolean {

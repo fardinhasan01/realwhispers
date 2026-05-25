@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Download, FileText, Film, Play, X, ZoomIn,
+  Download, FileText, Film, Play, X, ZoomIn, Maximize2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/services/chatService";
+import { cloudinaryVideoPoster } from "@/lib/cloudinary";
 import {
   Dialog,
   DialogContent,
@@ -56,27 +57,7 @@ export function MediaMessageContent({ msg, me }: { msg: ChatMessage; me: boolean
       );
 
     case "video":
-      return (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="relative overflow-hidden rounded-2xl"
-        >
-          <video
-            src={url}
-            controls
-            playsInline
-            preload="metadata"
-            className="max-h-56 max-w-full rounded-2xl bg-black/40"
-          />
-          <motion.div className={cn(
-            "pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]",
-            me ? "bg-white/20 text-white" : "bg-black/40 text-white",
-          )}>
-            <Film className="h-3 w-3" /> Video
-          </motion.div>
-        </motion.div>
-      );
+      return <VideoMessageContent url={url} me={me} />;
 
     case "audio":
       return (
@@ -122,6 +103,45 @@ export function MediaMessageContent({ msg, me }: { msg: ChatMessage; me: boolean
         </a>
       );
   }
+}
+
+function VideoMessageContent({ url, me }: { url: string; me: boolean }) {
+  const poster = cloudinaryVideoPoster(url);
+  const [videoFull, setVideoFull] = useState(false);
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="relative overflow-hidden rounded-2xl"
+      >
+        <button type="button" onClick={() => setVideoFull(true)} className="relative block">
+          <video
+            src={url}
+            poster={poster}
+            controls
+            playsInline
+            preload="metadata"
+            className="max-h-56 max-w-full rounded-2xl bg-black/40"
+          />
+          <span className="absolute bottom-2 right-2 rounded-full bg-black/50 p-1.5">
+            <Maximize2 className="h-4 w-4 text-white" />
+          </span>
+        </button>
+        <motion.div className={cn(
+          "pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]",
+          me ? "bg-white/20 text-white" : "bg-black/40 text-white",
+        )}>
+          <Film className="h-3 w-3" /> Video
+        </motion.div>
+      </motion.div>
+      <Dialog open={videoFull} onOpenChange={setVideoFull}>
+        <DialogContent className="max-w-[95vw] border-none bg-black/90 p-2">
+          <video src={url} controls autoPlay playsInline className="max-h-[85vh] w-full rounded-xl" />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 export function UploadProgressBar({

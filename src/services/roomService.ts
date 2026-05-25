@@ -271,6 +271,24 @@ export async function burnRoomMessages(roomCode: string): Promise<void> {
   await set(ref(getDb(), `rooms/${code}/messages`), {});
 }
 
+export async function deleteRoomData(roomCode: string): Promise<void> {
+  await ensureReady();
+  const code = normalizeRoomCode(roomCode);
+  const uid = getUserId();
+  console.log("[WhisperLock] deleteRoomData", { code, uid });
+  await remove(ref(getDb(), `rooms/${code}/users/${uid}`));
+  await setUserOnline(code, false);
+  const usersSnap = await get(ref(getDb(), `rooms/${code}/users`));
+  const users = usersSnap.val() as Record<string, boolean> | null;
+  const active = users
+    ? Object.keys(users).filter((k) => users[k]).length
+    : 0;
+  if (active === 0) {
+    await remove(roomRef(code));
+    console.log("[WhisperLock] deleteRoomData — removed empty room node", { code });
+  }
+}
+
 export async function isRoomMember(roomCode: string): Promise<boolean> {
   await ensureReady();
   const uid = getUserId();

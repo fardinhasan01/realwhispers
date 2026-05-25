@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import {
-  Phone, PhoneOff, Video, Mic, MicOff, VideoOff, SwitchCamera,
+  Phone, PhoneOff, Video, Mic, MicOff, VideoOff, SwitchCamera, Volume2, VolumeX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CallState } from "@/services/callService";
@@ -19,12 +19,14 @@ interface CallOverlayProps {
   duration: number;
   muted: boolean;
   cameraOn: boolean;
+  speakerOn?: boolean;
   onAccept: () => void;
   onDecline: () => void;
   onEnd: () => void;
   onToggleMute: () => void;
   onToggleCamera: () => void;
   onSwitchCamera: () => void;
+  onToggleSpeaker?: () => void;
 }
 
 export function CallOverlay({
@@ -35,12 +37,14 @@ export function CallOverlay({
   duration,
   muted,
   cameraOn,
+  speakerOn = true,
   onAccept,
   onDecline,
   onEnd,
   onToggleMute,
   onToggleCamera,
   onSwitchCamera,
+  onToggleSpeaker,
 }: CallOverlayProps) {
   const status = callState?.status ?? incoming?.state.status;
   const isVideo = (callState?.type ?? incoming?.state.type) === "video";
@@ -124,6 +128,14 @@ export function CallOverlay({
       {!isIncoming && (
         <div className="relative z-10 flex items-center justify-center gap-4 pb-12">
           <CallBtn onClick={onToggleMute} active={muted} icon={muted ? MicOff : Mic} label="Mute" />
+          {onToggleSpeaker && (
+            <CallBtn
+              onClick={onToggleSpeaker}
+              active={!speakerOn}
+              icon={speakerOn ? Volume2 : VolumeX}
+              label="Speaker"
+            />
+          )}
           {isVideo && (
             <>
               <CallBtn onClick={onToggleCamera} active={!cameraOn} icon={cameraOn ? Video : VideoOff} label="Cam" />

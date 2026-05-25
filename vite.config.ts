@@ -5,16 +5,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 
 export default defineConfig({
-  base: "./", // 🔥 CRITICAL FIX FOR CAPACITOR
-
-  server: {
-    proxy: {
-      "/api": {
-        target: "http://localhost:3001",
-        changeOrigin: true,
-      },
-    },
-  },
+  base: "./", // Capacitor Android WebView
 
   plugins: [
     tanstackRouter({ target: "react", autoCodeSplitting: true }),

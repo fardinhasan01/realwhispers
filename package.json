@@ -4,10 +4,9 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n web,upload -c cyan,magenta \"vite dev --host\" \"tsx server/index.ts\"",
-    "dev:web": "vite dev --host",
-    "server:dev": "tsx server/index.ts",
+    "dev": "vite dev",
     "build": "vite build",
+    "setup:cloudinary": "node scripts/setup-cloudinary-preset.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",

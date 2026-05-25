@@ -16,6 +16,7 @@ export function useCall(roomCode: string | null) {
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [cameraOn, setCameraOn] = useState(true);
+  const [speakerOn, setSpeakerOn] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [incoming, setIncoming] = useState<{ roomCode: string; state: CallState } | null>(null);
 
@@ -90,6 +91,11 @@ export function useCall(roomCode: string | null) {
     void svcRef.current?.switchCamera();
   }, []);
 
+  const toggleSpeaker = useCallback(() => {
+    const on = svcRef.current?.toggleSpeakerMode() ?? true;
+    setSpeakerOn(on);
+  }, []);
+
   const isActive = callState?.status === "accepted" || callState?.status === "ringing";
 
   return {
@@ -99,6 +105,7 @@ export function useCall(roomCode: string | null) {
     duration,
     muted,
     cameraOn,
+    speakerOn,
     error,
     incoming,
     isActive,
@@ -110,6 +117,7 @@ export function useCall(roomCode: string | null) {
     toggleMute,
     toggleCamera,
     switchCamera,
+    toggleSpeaker,
   };
 }
 

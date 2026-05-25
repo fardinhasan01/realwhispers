@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Flame, Image as ImageIcon, Mic, Plus, Send,
   Smile, Timer, Shield, Heart, Reply, X, Phone, Video, LayoutGrid,
-  Paperclip, Film,
+  Paperclip, Film, MoreVertical, Camera,
 } from "lucide-react";
 import {
   isFakeMode, isOnboarded, isUnlocked, updateRoom, setActiveRoom,
@@ -16,13 +16,17 @@ import { Particles } from "@/components/whisper/Particles";
 import { useRoom } from "@/hooks/useRoom";
 import { useMessages, isMe } from "@/hooks/useMessages";
 import { usePresence } from "@/hooks/usePresence";
-import { updateRoomMeta, burnRoomMessages } from "@/services/roomService";
+import { updateRoomMeta, burnRoomMessages, leaveRoom, deleteRoomData, joinRoom } from "@/services/roomService";
+import { deleteRoom } from "@/lib/whisper-store";
 import type { ChatMessage } from "@/services/chatService";
 import { normalizeRoomCode } from "@/lib/room-code";
 import { useCall } from "@/hooks/useCall";
 import { CallOverlay } from "@/components/whisper/CallOverlay";
 import { MediaMessageContent, UploadProgressBar } from "@/components/whisper/MediaMessage";
 import { useMediaUpload } from "@/hooks/useMediaUpload";
+import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import { VoiceNoteRecorder } from "@/components/whisper/VoiceNoteRecorder";
+import { RoomMenu } from "@/components/whisper/RoomMenu";
 import { haptic } from "@/lib/haptics";
 
 export const Route = createFileRoute("/chat/$roomId")({
@@ -55,17 +59,19 @@ function Chat() {
   const { statusLabel, isOnline } = usePresence(roomId);
   const call = useCall(roomId);
   const mediaUpload = useMediaUpload(roomId);
+  const voice = useVoiceRecorder();
   const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [showTimer, setShowTimer] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
+  const [showRoomMenu, setShowRoomMenu] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [reactingFor, setReactingFor] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
-  const audioRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fake = isFakeMode();
 
@@ -75,6 +81,16 @@ function Chat() {
     setActiveRoom(roomId);
     void markSeen();
   }, [roomId, nav, markSeen]);
+
+  useEffect(() => {
+    if (!roomLoading && room && !room.isMember && roomId) {
+      console.log("[WhisperLock] chat — re-joining room", { roomId });
+      void joinRoom(roomId, { myNickname: room.myNickname }).then((r) => {
+        if (r.ok) console.log("[WhisperLock] chat — re-joined", { roomId });
+        else console.warn("[WhisperLock] chat — re-join failed", r);
+      });
+    }
+  }, [room, roomLoading, roomId]);
 
   useEffect(() => {
     if (!roomLoading && !room) nav({ to: "/rooms" });
@@ -121,7 +137,8 @@ function Chat() {
       toast.success("Media sent");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Upload failed";
-      toast.error(msg.includes("Network") ? "Upload server offline — run npm run dev" : msg);
+      console.error("[WhisperLock] chat — media send failed", err);
+      toast.error(msg);
     } finally {
       setSending(false);
     }
@@ -139,6 +156,35 @@ function Chat() {
     updateRoom(room.id, { disappear: v });
     setShowTimer(false);
     toast.success(`Disappear: ${v}`);
+  };
+
+  const handleLeaveRoom = async () => {
+    await leaveRoom(roomId);
+    deleteRoom(roomId);
+    toast.success("Left room");
+    nav({ to: "/rooms" });
+  };
+
+  const handleDeleteRoom = async () => {
+    await burnRoomMessages(roomId);
+    await deleteRoomData(roomId);
+    deleteRoom(roomId);
+    toast.success("Room removed");
+    nav({ to: "/rooms" });
+  };
+
+  const handleVoiceSend = async () => {
+    const file = await voice.stop();
+    if (file) await handleMedia(file);
+  };
+
+  const startVoiceNote = async () => {
+    try {
+      await voice.start();
+      haptic("medium");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Microphone required");
+    }
   };
 
   const burn = async () => {
@@ -170,6 +216,8 @@ function Chat() {
         onToggleMute={call.toggleMute}
         onToggleCamera={call.toggleCamera}
         onSwitchCamera={call.switchCamera}
+        onToggleSpeaker={call.toggleSpeaker}
+        speakerOn={call.speakerOn}
       />
       <Particles count={10} />
 
@@ -235,13 +283,24 @@ function Chat() {
           <Timer className="h-5 w-5" />
         </button>
         <button
-          onClick={burn}
-          className="flex h-10 w-10 items-center justify-center rounded-2xl text-destructive hover:bg-destructive/10"
-          aria-label="Burn chat"
+          type="button"
+          onClick={() => setShowRoomMenu(true)}
+          className="flex h-10 w-10 items-center justify-center rounded-2xl hover:bg-white/5"
+          aria-label="Room menu"
         >
-          <Flame className="h-5 w-5" />
+          <MoreVertical className="h-5 w-5" />
         </button>
       </header>
+
+      <RoomMenu
+        open={showRoomMenu}
+        onClose={() => setShowRoomMenu(false)}
+        roomCode={roomId}
+        invite={room.invite ?? null}
+        onLeave={() => void handleLeaveRoom()}
+        onDelete={() => void handleDeleteRoom()}
+        onSettings={() => nav({ to: "/settings" })}
+      />
 
       {/* Timer dropdown */}
       <AnimatePresence>
@@ -399,6 +458,16 @@ function Chat() {
         )}
       </AnimatePresence>
 
+      <VoiceNoteRecorder
+        status={voice.status}
+        durationLabel={voice.durationLabel}
+        onStart={() => {}}
+        onPause={voice.pause}
+        onResume={voice.resume}
+        onStop={() => void handleVoiceSend()}
+        onCancel={voice.cancel}
+      />
+
       {/* Composer */}
       <motion.div className="safe-bottom glass-strong border-t border-white/5 px-3 pt-2.5 pb-3">
         <AnimatePresence>
@@ -407,14 +476,14 @@ function Chat() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="mb-2 grid grid-cols-4 gap-2 overflow-hidden"
+              className="mb-2 grid grid-cols-5 gap-2 overflow-hidden"
             >
               {[
-                { ref: imageRef, icon: ImageIcon, label: "Photo", accept: "image/*" },
+                { ref: imageRef, icon: ImageIcon, label: "Gallery", accept: "image/*" },
+                { ref: cameraRef, icon: Camera, label: "Camera", accept: "image/*", capture: "environment" as const },
                 { ref: videoRef, icon: Film, label: "Video", accept: "video/*" },
-                { ref: audioRef, icon: Mic, label: "Audio", accept: "audio/*" },
-                { ref: fileRef, icon: Paperclip, label: "File", accept: "*/*" },
-              ].map(({ ref: inputRef, icon: Icon, label, accept }) => (
+                { ref: fileRef, icon: Paperclip, label: "File", accept: ".pdf,.doc,.docx,.zip,.txt,application/*" },
+              ].map(({ ref: inputRef, icon: Icon, label, accept, capture }) => (
                 <button
                   key={label}
                   type="button"
@@ -427,6 +496,7 @@ function Chat() {
                     ref={inputRef}
                     type="file"
                     accept={accept}
+                    capture={capture}
                     className="hidden"
                     onChange={(e) => {
                       const f = e.target.files?.[0];
@@ -437,6 +507,14 @@ function Chat() {
                   />
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => void startVoiceNote()}
+                className="glass flex flex-col items-center gap-1 rounded-2xl py-3 text-[10px] hover:bg-white/10"
+              >
+                <Mic className="h-5 w-5" />
+                Voice
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
@@ -481,15 +559,19 @@ function Chat() {
           </motion.div>
           <motion.button
             whileTap={{ scale: 0.92 }}
-            onClick={() => void handleSend()}
+            onClick={() => {
+              if (draft.trim()) void handleSend();
+              else if (voice.isActive) void handleVoiceSend();
+              else void startVoiceNote();
+            }}
             disabled={sending || mediaUpload.isUploading}
             className={cn(
               "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl transition",
-              draft.trim()
+              draft.trim() || voice.isActive
                 ? "bg-gradient-romance text-white shadow-glow-pink"
                 : "glass text-muted-foreground",
             )}
-            aria-label={draft.trim() ? "Send" : "Voice"}
+            aria-label={draft.trim() ? "Send" : "Voice note"}
           >
             {sending ? (
               <motion.span

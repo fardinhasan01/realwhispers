@@ -9,6 +9,7 @@ import {
 import { getUserId } from "@/lib/user-id";
 import { normalizeRoomCode } from "@/lib/room-code";
 import type { DisappearMode } from "@/lib/whisper-store";
+import type { RoomInvite } from "@/services/qrService";
 
 export interface RoomView {
   id: string;
@@ -20,6 +21,7 @@ export interface RoomView {
   disappear: DisappearMode;
   memberCount: number;
   isMember: boolean;
+  invite?: RoomInvite | null;
 }
 
 function toRoomView(roomCode: string, data: FirebaseRoom | null): RoomView | null {
@@ -36,6 +38,7 @@ function toRoomView(roomCode: string, data: FirebaseRoom | null): RoomView | nul
     disappear: (data.disappear as DisappearMode) ?? "off",
     memberCount: Object.keys(users).filter((k) => users[k]).length,
     isMember: Boolean(users[uid]),
+    invite: data.invite ?? null,
   };
 }
 
@@ -69,10 +72,17 @@ export function useRoom(roomCode: string | null) {
       roomRef,
       (snap) => {
         if (!snap.exists()) {
+          console.warn("[WhisperLock] useRoom — room not found", { code: normalizedCode });
           setRoom(null);
           setError("Room not found");
         } else {
-          setRoom(toRoomView(normalizedCode, snap.val() as FirebaseRoom));
+          const view = toRoomView(normalizedCode, snap.val() as FirebaseRoom);
+          console.log("[WhisperLock] useRoom — update", {
+            code: normalizedCode,
+            isMember: view?.isMember,
+            members: view?.memberCount,
+          });
+          setRoom(view);
           setError(null);
         }
         setLoading(false);

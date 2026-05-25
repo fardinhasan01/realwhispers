@@ -122,7 +122,11 @@ export function subscribeMessages(
   console.log("[WhisperLock] listenMessages", { path: `${roomPath(code)}/messages` });
   return onValue(
     messagesRef(code),
-    (snap) => onData(parseMessages(snap.val())),
+    (snap) => {
+      const msgs = parseMessages(snap.val());
+      console.log("[WhisperLock] messages update", { code, count: msgs.length });
+      onData(msgs);
+    },
     (err) => onError?.(err),
   );
 }
@@ -150,6 +154,7 @@ export async function sendMessage(
     replyToId: messageData.replyToId ?? null,
     reaction: messageData.reaction ?? null,
   });
+  console.log("[WhisperLock] sendMessage", { code, id, type: messageData.type ?? "text" });
   void incrementPartnerUnread(code, uid);
   return id;
 }
